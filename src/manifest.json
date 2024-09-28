@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "QuickSight Power Tools",
+  "version": "1.0.0",
+  "description": "A Chrome extension for QuickSight tools.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.bundle.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.quicksight.aws.amazon.com/sn/analyses/*"],
+      "js": ["content.bundle.js"]
+    }
+  ],
+  "host_permissions": ["https://*.quicksight.aws.amazon.com/*"]
+}
