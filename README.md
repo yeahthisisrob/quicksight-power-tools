@@ -44,14 +44,6 @@ To set up the project locally:
 
 4. Follow the **Installation** steps above to load the unpacked extension in Chrome using your local build.
 
-### Testing
-
-To run tests, use the following command:
-
-```bash
-npm run test
-```
-
 ## Contributing
 
 We welcome contributions from the community! Whether it's filing an issue, requesting a feature, or submitting a pull request, we encourage developers to get involved. Please review our [Contributing Guidelines](#) before getting started.
