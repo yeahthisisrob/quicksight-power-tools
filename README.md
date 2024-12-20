@@ -37,12 +37,29 @@ To set up the project locally:
    npm install
    ```
 
-3. **Build the project**:
-   ```bash
-   npm run build
-   ```
+3. **Build the Extension**:
+   - After installing dependencies, build the project:
+     ```bash
+     npm run build
+     ```
+   - This will generate a `dist` directory containing the extension's build files.
 
-4. Follow the **Installation** steps above to load the unpacked extension in Chrome using your local build.
+4. **Load the Extension in Chrome**:
+   - Open Google Chrome.
+   - Navigate to the Extensions page by entering `chrome://extensions/` in the address bar.
+   - Enable "Developer mode" by toggling the switch in the top right corner.
+   - Click the "Load unpacked" button.
+   - In the dialog that appears, select the `dist` directory from your cloned repository.
+   - The extension should now appear in your list of installed extensions.
+
+5. **Develop and Test**:
+   - With the extension loaded, you can make changes to the source code.
+   - After making changes, rebuild the project using `npm run build`.
+   - Reload the extension in Chrome by clicking the refresh icon next to it on the Extensions page.
+
+6. **Uninstall the Extension**:
+   - To remove the extension, navigate to the Extensions page (`chrome://extensions/`).
+   - Locate "QuickSight Power Tools" and click the "Remove" button.
 
 ## Contributing
 
