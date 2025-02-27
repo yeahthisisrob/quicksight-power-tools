@@ -37,7 +37,7 @@ const extractTokens = (expression: string): string[] => {
     }
 
     // Build tokens based on word boundaries
-    if (/\w/.test(char)) {
+    if (/[\w-]/.test(char)) {
       token += char;
     } else {
       if (token.length > 0) {
