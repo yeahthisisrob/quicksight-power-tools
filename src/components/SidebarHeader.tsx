@@ -5,6 +5,7 @@ import { AnalysisMetadata } from "../utils/quicksightUtils";
 import AWSCredentialsExpiryTimer from "./AWSCredentialsExpiryTimer";
 import { CloudTrailCredentials } from "../types/CloudTrailCredentials";
 import { clearTagCache, enhanceResourceList } from "../utils/tagEnhancer";
+import { clearLastUpdatedCache, enhanceLastUpdatedBy } from "../utils/lastUpdatedByEnhancer";
 
 interface SidebarHeaderProps {
   analysisMetadata: AnalysisMetadata | null;
@@ -22,7 +23,22 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const handleRefreshTags = async () => {
     if (credentials) {
       clearTagCache();
-      await enhanceResourceList(credentials);
+      try {
+        await enhanceResourceList(credentials);
+      } catch (err) {
+        console.error("Failed to enhance resource tags:", err);
+      }
+    }
+  };
+
+  const handleRefreshLastUpdated = async () => {
+    if (credentials) {
+      clearLastUpdatedCache();
+      try {
+        await enhanceLastUpdatedBy(credentials);
+      } catch (err) {
+        console.error("Failed to enhance Last Updated By:", err);
+      }
     }
   };
 
@@ -41,15 +57,18 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           </Typography>
           <Typography variant="caption">
             Last Updated:{" "}
-            {dayjs(analysisMetadata.LastUpdatedTime).format(
-              "YYYY-MM-DD HH:mm:ss"
-            )}
+            {dayjs(analysisMetadata.LastUpdatedTime).format("YYYY-MM-DD HH:mm:ss")}
           </Typography>
         </Box>
       )}
-      <Button variant="contained" onClick={handleRefreshTags} sx={{ mt: 2 }}>
-        Refresh Tags
-      </Button>
+      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+        <Button variant="contained" onClick={handleRefreshTags}>
+          Refresh Tags
+        </Button>
+        <Button variant="contained" onClick={handleRefreshLastUpdated}>
+          Refresh Last Updated
+        </Button>
+      </Box>
     </Box>
   );
 };

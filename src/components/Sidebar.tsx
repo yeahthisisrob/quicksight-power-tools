@@ -17,6 +17,7 @@ import AssumeRoleForm from "./AssumeRoleForm";
 import { Typography } from "@mui/material";
 import SidebarHeader from "./SidebarHeader";
 import { enhanceResourceList } from "../utils/tagEnhancer";
+import { enhanceLastUpdatedBy } from "../utils/lastUpdatedByEnhancer";
 
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
@@ -109,7 +110,7 @@ const Sidebar: React.FC = () => {
     }
   }, [credentials, analysisId, region]);
 
-  // Combine updating analysis ID and enhancing resource list into one effect.
+  // Update analysis ID and enhance resource list and last-updated-by column when credentials or URL changes.
   useEffect(() => {
     if (!credentials) {
       setAnalysisId(null);
@@ -119,7 +120,6 @@ const Sidebar: React.FC = () => {
       return;
     }
 
-    // Helper function to update analysis ID and enhance the resource list
     const updateAnalysisAndEnhance = () => {
       const currentUrl = window.location.href;
       const currentAnalysisId = getAnalysisIdFromUrl(currentUrl);
@@ -130,12 +130,13 @@ const Sidebar: React.FC = () => {
       enhanceResourceList(credentials).catch((err) =>
         console.error("Failed to enhance resource list:", err)
       );
+      enhanceLastUpdatedBy(credentials).catch((err) =>
+        console.error("Failed to enhance Last Updated By:", err)
+      );
     };
 
-    // Initial update on credentials change
     updateAnalysisAndEnhance();
 
-    // Set up interval to detect URL changes
     let prevUrl = window.location.href;
     const intervalId = setInterval(() => {
       const currentUrl = window.location.href;
@@ -155,7 +156,7 @@ const Sidebar: React.FC = () => {
     }
   }, [credentials, analysisId, refreshData]);
 
-  // Fetch CloudTrail events
+  // (Retaining CloudTrail events code for changeHistory if needed)
   const fetchCloudTrailEventsData = useCallback(
     async (daysAgo: number = 7) => {
       if (credentials && analysisId) {
@@ -176,7 +177,6 @@ const Sidebar: React.FC = () => {
     [credentials, analysisId, region]
   );
 
-  // Lazy load change history if not already loaded
   useEffect(() => {
     if (credentials && analysisId && !isChangeHistoryLoaded) {
       fetchCloudTrailEventsData();
@@ -189,7 +189,7 @@ const Sidebar: React.FC = () => {
     setError(null);
     setShowJsonInput(false);
     if (window.setCredentials) {
-      window.setCredentials(receivedCredentials); // Share credentials with content script
+      window.setCredentials(receivedCredentials);
     }
   };
 
