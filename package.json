@@ -19,6 +19,8 @@
     "@emotion/styled": "^11.13.0",
     "@mui/icons-material": "^6.1.1",
     "@mui/material": "^6.1.1",
+    "@types/aws-sdk": "^0.0.42",
+    "aws-sdk": "^2.1692.0",
     "dayjs": "^1.11.13",
     "file-saver": "^2.0.5",
     "react": "^18.3.1",

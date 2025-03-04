@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QuickSight Power Tools",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "description": "A Chrome extension for QuickSight tools.",
   "permissions": ["storage", "activeTab", "scripting"],
   "background": {
@@ -21,7 +21,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.quicksight.aws.amazon.com/sn/analyses/*"],
+      "matches": [
+        "https://*.quicksight.aws.amazon.com/sn/analyses/*",
+        "https://*.quicksight.aws.amazon.com/sn/start/dashboards*",
+        "https://*.quicksight.aws.amazon.com/sn/start/data-sets*",
+        "https://*.quicksight.aws.amazon.com/sn/start/search*"
+      ],
       "js": ["content.bundle.js"]
     }
   ],

@@ -16,6 +16,7 @@ import { CalculatedField } from "../types/CalculatedField";
 import AssumeRoleForm from "./AssumeRoleForm";
 import { Typography } from "@mui/material";
 import SidebarHeader from "./SidebarHeader";
+import { enhanceResourceList } from "../utils/tagEnhancer";
 
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
@@ -28,7 +29,7 @@ const Sidebar: React.FC = () => {
   const [credentials, setCredentials] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpiration, setSessionExpiration] = useState<string | null>(
-    null,
+    null
   );
   const [showJsonInput, setShowJsonInput] = useState<boolean>(true);
   const [activeSection, setActiveSection] =
@@ -37,7 +38,7 @@ const Sidebar: React.FC = () => {
   const [analysisMetadata, setAnalysisMetadata] = useState<any | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>(
-    [],
+    []
   );
   const [cloudTrailEvents, setCloudTrailEvents] = useState<any[]>([]);
   const [isChangeHistoryLoaded, setIsChangeHistoryLoaded] =
@@ -76,7 +77,7 @@ const Sidebar: React.FC = () => {
   // Function to handle changes in chrome.storage.local
   const handleStorageChange = (
     changes: { [key: string]: chrome.storage.StorageChange },
-    area: string,
+    area: string
   ) => {
     if (area === "local" && changes.region?.newValue) {
       setRegion(changes.region.newValue);
@@ -105,8 +106,8 @@ const Sidebar: React.FC = () => {
       try {
         setIsCalculatedFieldsLoading(true);
         const [metadata, { calculatedFields: fields }] = await Promise.all([
-          fetchAnalysisMetadata(credentials, analysisId, region), // Pass region
-          fetchAnalysisDefinition(credentials, analysisId, region), // Pass region
+          fetchAnalysisMetadata(credentials, analysisId, region),
+          fetchAnalysisDefinition(credentials, analysisId, region),
         ]);
         setAnalysisMetadata(metadata);
         setCalculatedFields(fields);
@@ -115,7 +116,7 @@ const Sidebar: React.FC = () => {
       } catch (err) {
         console.error(err);
         setError(
-          "Failed to fetch analysis data. Please check your permissions.",
+          "Failed to fetch analysis data. Please check your permissions."
         );
       } finally {
         setIsCalculatedFieldsLoading(false);
@@ -123,11 +124,14 @@ const Sidebar: React.FC = () => {
     }
   }, [credentials, analysisId, region]);
 
-  // Effect to set initial analysisId when credentials change
+  // Effect to set initial analysisId and enhance tags when credentials change
   useEffect(() => {
     if (credentials) {
       const currentAnalysisId = getAnalysisIdFromUrl(window.location.href);
       setAnalysisId(currentAnalysisId);
+      enhanceResourceList(credentials).catch((err) =>
+        console.error("Failed to enhance resource list:", err)
+      );
     } else {
       setAnalysisId(null);
       setCalculatedFields([]);
@@ -136,20 +140,23 @@ const Sidebar: React.FC = () => {
     }
   }, [credentials]);
 
-  // New effect to detect URL changes and update analysisId
+  // Effect to detect URL changes and update analysisId and reload cached tags
   useEffect(() => {
     if (credentials) {
-      let prevAnalysisId = getAnalysisIdFromUrl(window.location.href);
+      let prevUrl = window.location.href;
 
       const intervalId = setInterval(() => {
-        const currentAnalysisId = getAnalysisIdFromUrl(window.location.href);
-        if (currentAnalysisId !== prevAnalysisId) {
-          prevAnalysisId = currentAnalysisId;
+        const currentUrl = window.location.href;
+        if (currentUrl !== prevUrl) {
+          prevUrl = currentUrl;
+          const currentAnalysisId = getAnalysisIdFromUrl(currentUrl);
           setAnalysisId(currentAnalysisId);
-          // Reset state variables if necessary
           setCalculatedFields([]);
           setCloudTrailEvents([]);
           setIsChangeHistoryLoaded(false);
+          enhanceResourceList(credentials).catch((err) =>
+            console.error("Failed to enhance resource list:", err)
+          );
         }
       }, 1000); // Check every second
 
@@ -166,14 +173,51 @@ const Sidebar: React.FC = () => {
     }
   }, [credentials, analysisId, refreshData]);
 
+  const fetchCloudTrailEventsData = useCallback(
+    async (daysAgo: number = 7) => {
+      if (credentials && analysisId) {
+        try {
+          setIsChangeHistoryLoading(true);
+          const events = await fetchCloudTrailEvents(
+            credentials,
+            analysisId,
+            daysAgo,
+            region
+          );
+          setCloudTrailEvents(events);
+          setLastRefreshed(new Date());
+          setIsChangeHistoryLoaded(true);
+        } catch (err) {
+          console.error(err);
+          setError(
+            "Failed to fetch CloudTrail events. Please check your permissions."
+          );
+        } finally {
+          setIsChangeHistoryLoading(false);
+        }
+      }
+    },
+    [credentials, analysisId, region]
+  );
+
+  // Effect to trigger lazy loading of change history
+  useEffect(() => {
+    if (credentials && analysisId && !isChangeHistoryLoaded) {
+      fetchCloudTrailEventsData();
+    }
+  }, [credentials, analysisId, isChangeHistoryLoaded, fetchCloudTrailEventsData]);
+
   const handleCredentialsReceived = (
     receivedCredentials: any,
-    expiration: string,
+    expiration: string
   ) => {
     setCredentials(receivedCredentials);
     setSessionExpiration(expiration);
     setError(null);
     setShowJsonInput(false);
+    if (window.setCredentials) {
+      window.setCredentials(receivedCredentials); // Share credentials with content script
+    }
   };
 
   const handleError = (errorMessage: string) => {
@@ -186,45 +230,6 @@ const Sidebar: React.FC = () => {
     setShowJsonInput(true);
   };
 
-  const fetchCloudTrailEventsData = useCallback(
-    async (daysAgo: number = 7) => {
-      if (credentials && analysisId) {
-        try {
-          setIsChangeHistoryLoading(true);
-          const events = await fetchCloudTrailEvents(
-            credentials,
-            analysisId,
-            daysAgo,
-            region,
-          );
-          setCloudTrailEvents(events);
-          setLastRefreshed(new Date());
-          setIsChangeHistoryLoaded(true);
-        } catch (err) {
-          console.error(err);
-          setError(
-            "Failed to fetch CloudTrail events. Please check your permissions.",
-          );
-        } finally {
-          setIsChangeHistoryLoading(false);
-        }
-      }
-    },
-    [credentials, analysisId, region],
-  );
-
-  // Effect to trigger lazy loading of change history
-  useEffect(() => {
-    if (credentials && analysisId && !isChangeHistoryLoaded) {
-      fetchCloudTrailEventsData();
-    }
-  }, [
-    credentials,
-    analysisId,
-    isChangeHistoryLoaded,
-    fetchCloudTrailEventsData,
-  ]);
-
   return (
     <SidebarLayout
       activeSection={activeSection}
@@ -235,6 +240,7 @@ const Sidebar: React.FC = () => {
           analysisMetadata={analysisMetadata}
           sessionExpiration={sessionExpiration}
           onSessionExpire={handleSessionExpire}
+          credentials={credentials}
         />
       )}
       {showJsonInput && (
