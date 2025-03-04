@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { CloudTrailCredentials } from '../types/CloudTrailCredentials';
 import { getResourceTags, getRegionFromUrl, getAccountId, tagCache } from '../utils/tagEnhancer';
 import { QuickSightClient, TagResourceCommand, UntagResourceCommand } from '@aws-sdk/client-quicksight';
+import { Box, Chip, TextField, Button, Typography } from '@mui/material';
 
 interface ResourceTagsProps {
   resourceType: string;
@@ -26,10 +27,17 @@ interface AddTagPillProps {
   onTagAdded: (newTag: { Key: string; Value: string }) => void;
 }
 
-const TagPill: React.FC<TagPillProps> = ({ tag, resourceType, resourceId, credentials, onTagUpdated, onTagDeleted }) => {
+const TagPill: React.FC<TagPillProps> = ({
+  tag,
+  resourceType,
+  resourceId,
+  credentials,
+  onTagUpdated,
+  onTagDeleted,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [key, setKey] = useState(tag.Key);
-  const [value, setValue] = useState(tag.Value);
+  const [keyValue, setKeyValue] = useState(tag.Key);
+  const [valueValue, setValueValue] = useState(tag.Value);
 
   const handleSave = async () => {
     try {
@@ -37,7 +45,7 @@ const TagPill: React.FC<TagPillProps> = ({ tag, resourceType, resourceId, creden
       const accountId = await getAccountId(credentials);
       const currentTags = await getResourceTags(resourceId, accountId, region, resourceType, credentials);
       const updatedTags = currentTags.filter((t) => t.Key !== tag.Key);
-      updatedTags.push({ Key: key, Value: value });
+      updatedTags.push({ Key: keyValue, Value: valueValue });
 
       const quickSightClient = new QuickSightClient({
         region,
@@ -53,7 +61,7 @@ const TagPill: React.FC<TagPillProps> = ({ tag, resourceType, resourceId, creden
       });
       await quickSightClient.send(command);
 
-      onTagUpdated({ Key: key, Value: value });
+      onTagUpdated({ Key: keyValue, Value: valueValue });
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating tag:', error);
@@ -72,7 +80,6 @@ const TagPill: React.FC<TagPillProps> = ({ tag, resourceType, resourceId, creden
           sessionToken: credentials.sessionToken,
         },
       });
-
       const command = new UntagResourceCommand({
         ResourceArn: `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`,
         TagKeys: [tag.Key],
@@ -88,57 +95,79 @@ const TagPill: React.FC<TagPillProps> = ({ tag, resourceType, resourceId, creden
 
   if (isEditing) {
     return (
-      <div style={{ display: 'inline-block', marginRight: '5px' }}>
-        <input
-          type="text"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          style={{ width: '80px', marginRight: '5px' }}
+      <Box display="flex" alignItems="center" sx={{ mr: 0.5, mb: 0.5 }}>
+        <TextField
+          label="Key"
+          value={keyValue}
+          onChange={(e) => setKeyValue(e.target.value)}
+          size="small"
+          sx={{ width: 120, mr: 0.5 }}
+          inputProps={{ style: { fontSize: '0.65rem', height: '1.5rem' } }}
         />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          style={{ width: '80px', marginRight: '5px' }}
+        <TextField
+          label="Value"
+          value={valueValue}
+          onChange={(e) => setValueValue(e.target.value)}
+          size="small"
+          sx={{ width: 120, mr: 0.5 }}
+          inputProps={{ style: { fontSize: '0.65rem', height: '1.5rem' } }}
         />
-        <button onClick={handleSave}>Save</button>
-        <button onClick={() => setIsEditing(false)} style={{ marginLeft: '5px' }}>Cancel</button>
-        <button onClick={handleDelete} style={{ marginLeft: '5px', color: 'red' }}>Delete</button>
-      </div>
+        <Button
+          onClick={handleSave}
+          variant="contained"
+          size="small"
+          sx={{ mr: 0.5, minWidth: 'auto', padding: '4px 8px', fontSize: '0.7rem' }}
+        >
+          Save
+        </Button>
+        <Button
+          onClick={() => setIsEditing(false)}
+          variant="outlined"
+          size="small"
+          sx={{ mr: 0.5, minWidth: 'auto', padding: '4px 8px', fontSize: '0.7rem' }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleDelete}
+          variant="outlined"
+          size="small"
+          color="error"
+          sx={{ minWidth: 'auto', padding: '4px 8px', fontSize: '0.7rem' }}
+        >
+          Delete
+        </Button>
+      </Box>
     );
   }
 
   return (
-    <span
-      className="tag-pill"
+    <Chip
+      label={`${tag.Key}: ${tag.Value}`}
       onClick={() => setIsEditing(true)}
-      style={{
-        display: 'inline-block',
-        backgroundColor: '#e0e0e0',
-        borderRadius: '12px',
-        padding: '2px 8px',
-        marginRight: '5px',
-        fontSize: '12px',
-        cursor: 'pointer',
-      }}
-    >
-      {tag.Key}: {tag.Value}
-    </span>
+      clickable
+      sx={{ mr: 0.5, mb: 0.5, fontSize: '0.75rem', height: 24 }}
+    />
   );
 };
 
-const AddTagPill: React.FC<AddTagPillProps> = ({ resourceType, resourceId, credentials, onTagAdded }) => {
+const AddTagPill: React.FC<AddTagPillProps> = ({
+  resourceType,
+  resourceId,
+  credentials,
+  onTagAdded,
+}) => {
   const [isAdding, setIsAdding] = useState(false);
-  const [key, setKey] = useState('');
-  const [value, setValue] = useState('');
+  const [keyValue, setKeyValue] = useState('');
+  const [valueValue, setValueValue] = useState('');
 
   const handleSave = async () => {
-    if (!key || !value) return;
+    if (!keyValue || !valueValue) return;
     try {
       const region = getRegionFromUrl();
       const accountId = await getAccountId(credentials);
       const currentTags = await getResourceTags(resourceId, accountId, region, resourceType, credentials);
-      const updatedTags = [...currentTags, { Key: key, Value: value }];
+      const updatedTags = [...currentTags, { Key: keyValue, Value: valueValue }];
 
       const quickSightClient = new QuickSightClient({
         region,
@@ -154,10 +183,10 @@ const AddTagPill: React.FC<AddTagPillProps> = ({ resourceType, resourceId, crede
       });
       await quickSightClient.send(command);
 
-      onTagAdded({ Key: key, Value: value });
+      onTagAdded({ Key: keyValue, Value: valueValue });
       setIsAdding(false);
-      setKey('');
-      setValue('');
+      setKeyValue('');
+      setValueValue('');
     } catch (error) {
       console.error('Error adding tag:', error);
     }
@@ -165,43 +194,52 @@ const AddTagPill: React.FC<AddTagPillProps> = ({ resourceType, resourceId, crede
 
   if (isAdding) {
     return (
-      <div style={{ display: 'inline-block', marginRight: '5px' }}>
-        <input
-          type="text"
+      <Box display="flex" alignItems="center" sx={{ mr: 0.5, mb: 0.5 }}>
+        <TextField
+          label="Key"
           placeholder="Key"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          style={{ width: '80px', marginRight: '5px' }}
+          value={keyValue}
+          onChange={(e) => setKeyValue(e.target.value)}
+          size="small"
+          sx={{ width: 120, mr: 0.5 }}
+          inputProps={{ style: { fontSize: '0.65rem', height: '1.5rem' } }}
         />
-        <input
-          type="text"
+        <TextField
+          label="Value"
           placeholder="Value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          style={{ width: '80px', marginRight: '5px' }}
+          value={valueValue}
+          onChange={(e) => setValueValue(e.target.value)}
+          size="small"
+          sx={{ width: 120, mr: 0.5 }}
+          inputProps={{ style: { fontSize: '0.65rem', height: '1.5rem' } }}
         />
-        <button onClick={handleSave}>Add</button>
-        <button onClick={() => setIsAdding(false)} style={{ marginLeft: '5px' }}>Cancel</button>
-      </div>
+        <Button
+          onClick={handleSave}
+          variant="contained"
+          size="small"
+          sx={{ mr: 0.5, minWidth: 'auto', padding: '4px 8px', fontSize: '0.7rem' }}
+        >
+          Add
+        </Button>
+        <Button
+          onClick={() => setIsAdding(false)}
+          variant="outlined"
+          size="small"
+          sx={{ minWidth: 'auto', padding: '4px 8px', fontSize: '0.7rem' }}
+        >
+          Cancel
+        </Button>
+      </Box>
     );
   }
 
   return (
-    <span
-      className="add-tag-pill"
+    <Chip
+      label="Add Tag"
       onClick={() => setIsAdding(true)}
-      style={{
-        display: 'inline-block',
-        backgroundColor: '#d0e0ff',
-        borderRadius: '12px',
-        padding: '2px 8px',
-        marginRight: '5px',
-        fontSize: '12px',
-        cursor: 'pointer',
-      }}
-    >
-      Add Tag
-    </span>
+      clickable
+      sx={{ mr: 0.5, mb: 0.5, fontSize: '0.75rem', height: 24, backgroundColor: '#d0e0ff' }}
+    />
   );
 };
 
@@ -230,11 +268,11 @@ export const ResourceTags: React.FC<ResourceTagsProps> = ({ resourceType, resour
   }, [resourceType, resourceId, credentials]);
 
   if (loading) {
-    return <span>Loading tags...</span>;
+    return <Typography variant="body2">Loading tags...</Typography>;
   }
 
   return (
-    <div>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
       {tags.map((tag) => (
         <TagPill
           key={tag.Key}
@@ -267,6 +305,6 @@ export const ResourceTags: React.FC<ResourceTagsProps> = ({ resourceType, resour
           tagCache[cacheKey] = newTags;
         }}
       />
-    </div>
+    </Box>
   );
 };

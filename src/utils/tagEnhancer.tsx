@@ -11,15 +11,24 @@ interface CloudTrailCredentials {
   sessionToken: string;
 }
 
-export const tagCache: { [key: string]: { Key: string; Value: string }[] } = {};
+// Cache for resource tags: keys are in the format "resourceType-resourceId"
+export const tagCache: Record<string, Array<{ Key: string; Value: string }>> = {};
 
+/**
+ * Extracts the AWS region from the current URL.
+ */
 export function getRegionFromUrl(): string {
   const url = window.location.href;
   const match = url.match(/https:\/\/(.*?)\.quicksight\.aws\.amazon\.com/);
   return match ? match[1] : 'us-east-1';
 }
 
+let cachedAccountId: string | null = null;
+/**
+ * Retrieves the AWS account ID using STS and caches it for subsequent calls.
+ */
 export async function getAccountId(creds: CloudTrailCredentials): Promise<string> {
+  if (cachedAccountId) return cachedAccountId;
   const stsClient = new STSClient({
     region: getRegionFromUrl(),
     credentials: {
@@ -30,40 +39,66 @@ export async function getAccountId(creds: CloudTrailCredentials): Promise<string
   });
   const command = new GetCallerIdentityCommand({});
   const response = await stsClient.send(command);
-  if (!response.Account) throw new Error('Failed to retrieve account ID');
+  if (!response.Account) {
+    throw new Error('Failed to retrieve account ID');
+  }
+  cachedAccountId = response.Account;
   return response.Account;
 }
 
+/**
+ * Extracts the resource ID from an anchor link using the URL API.
+ * Assumes the resource ID is the last non-empty path segment,
+ * or the segment before 'view' if it appears last.
+ */
 export function getResourceIdFromLink(link: HTMLAnchorElement): string | null {
-  const href = link.getAttribute('href');
-  if (href) {
-    const parts = href.split('/');
-    if (parts[parts.length - 1] === 'view' && parts.length >= 3) {
-      return parts[parts.length - 2];
+  try {
+    const url = new URL(link.href);
+    const paths = url.pathname.split('/').filter(Boolean);
+    if (paths.length === 0) return null;
+    // If the last segment is "view", return the segment before it.
+    if (paths[paths.length - 1] === 'view' && paths.length >= 2) {
+      return paths[paths.length - 2];
     }
-    return parts[parts.length - 1];
+    return paths[paths.length - 1];
+  } catch (error) {
+    console.error('Invalid URL in link:', link.href, error);
+    return null;
   }
-  return null;
 }
 
+/**
+ * Determines the resource type (dashboard or dataset) based on the current URL and row content.
+ */
 export function getResourceType(url: string, row: HTMLElement): string {
   if (url.includes('/dashboards')) return 'dashboard';
   if (url.includes('/data-sets')) return 'dataset';
   if (url.includes('/search')) {
+    // Fallback: Try to extract the type from the third cell in the row
     const typeCell = row.querySelector('td:nth-child(3)');
     const typeText = typeCell?.textContent?.trim().toLowerCase();
-    return typeText === 'dashboard' ? 'dashboard' : typeText === 'dataset' ? 'dataset' : '';
+    if (typeText === 'dashboard' || typeText === 'dashboards') return 'dashboard';
+    if (typeText === 'dataset' || typeText === 'data-set' || typeText === 'datasets') return 'dataset';
   }
+  console.warn('Unable to determine resource type for row:', row);
   return '';
 }
 
+/**
+ * Fetches resource tags from QuickSight. Uses caching to avoid redundant calls.
+ */
 export async function getResourceTags(
   resourceId: string,
   accountId: string,
   region: string,
   resourceType: string,
   creds: CloudTrailCredentials
-): Promise<{ Key: string; Value: string }[]> {
+): Promise<Array<{ Key: string; Value: string }>> {
+  const cacheKey = `${resourceType}-${resourceId}`;
+  if (tagCache[cacheKey]) {
+    return tagCache[cacheKey];
+  }
+
   const quickSightClient = new QuickSightClient({
     region,
     credentials: {
@@ -72,20 +107,26 @@ export async function getResourceTags(
       sessionToken: creds.sessionToken,
     },
   });
+  const resourceArn = `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`;
   const command = new ListTagsForResourceCommand({
-    ResourceArn: `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`,
+    ResourceArn: resourceArn,
   });
   try {
     const response = await quickSightClient.send(command);
-    return (response.Tags || []).filter((tag): tag is { Key: string; Value: string } =>
-      tag.Key !== undefined && tag.Value !== undefined
+    const tags = (response.Tags || []).filter((tag): tag is { Key: string; Value: string } =>
+      tag.Key != null && tag.Value != null
     );
+    tagCache[cacheKey] = tags;
+    return tags;
   } catch (error) {
-    console.error(`Error fetching tags for ${resourceType}:`, error);
+    console.error(`Error fetching tags for ${resourceType} (${resourceId}):`, error);
     return [];
   }
 }
 
+/**
+ * Creates a visual "pill" element for a tag.
+ */
 export function createTagPill(tagKey: string, tagValue: string): HTMLElement {
   const pill = document.createElement('span');
   pill.className = 'tag-pill';
@@ -101,6 +142,11 @@ export function createTagPill(tagKey: string, tagValue: string): HTMLElement {
   return pill;
 }
 
+/**
+ * Enhances the resource list view by appending tag pills.
+ * For each row in the table, it determines the resource ID and type,
+ * then renders the ResourceTags component in a dedicated container.
+ */
 export async function enhanceResourceList(creds: CloudTrailCredentials): Promise<void> {
   const url = window.location.href;
   const region = getRegionFromUrl();
@@ -113,7 +159,10 @@ export async function enhanceResourceList(creds: CloudTrailCredentials): Promise
   }
 
   const table = document.querySelector('.enhanced-table-view.table');
-  if (!table) return;
+  if (!table) {
+    console.warn('Table not found');
+    return;
+  }
 
   const rows = table.querySelectorAll('tbody tr');
   for (const row of rows) {
@@ -124,15 +173,22 @@ export async function enhanceResourceList(creds: CloudTrailCredentials): Promise
     if (!resourceLink) continue;
 
     const resourceId = getResourceIdFromLink(resourceLink);
-    if (!resourceId) continue;
+    if (!resourceId) {
+      console.warn('Resource ID not found for link:', resourceLink);
+      continue;
+    }
 
     const resourceType = getResourceType(url, row as HTMLElement);
     if (!resourceType) continue;
 
     const nameContainer = nameCell.querySelector('.enhanced-table-view__row__name_security_label') || nameCell;
+    // Remove any existing tags container to avoid duplicates
     const existingContainer = nameContainer.querySelector('.resource-tags-container');
-    if (existingContainer) existingContainer.remove();
+    if (existingContainer) {
+      existingContainer.remove();
+    }
 
+    // Create a new container for the tags
     const tagsContainer = document.createElement('div');
     tagsContainer.className = 'resource-tags-container';
     nameContainer.appendChild(tagsContainer);
@@ -148,6 +204,9 @@ export async function enhanceResourceList(creds: CloudTrailCredentials): Promise
   }
 }
 
+/**
+ * Clears the tag cache.
+ */
 export function clearTagCache() {
   Object.keys(tagCache).forEach((key) => delete tagCache[key]);
 }

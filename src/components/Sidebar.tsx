@@ -28,34 +28,25 @@ interface StoredData {
 const Sidebar: React.FC = () => {
   const [credentials, setCredentials] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sessionExpiration, setSessionExpiration] = useState<string | null>(
-    null
-  );
+  const [sessionExpiration, setSessionExpiration] = useState<string | null>(null);
   const [showJsonInput, setShowJsonInput] = useState<boolean>(true);
-  const [activeSection, setActiveSection] =
-    useState<string>("calculatedFields");
+  const [activeSection, setActiveSection] = useState<string>("calculatedFields");
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [analysisMetadata, setAnalysisMetadata] = useState<any | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>(
-    []
-  );
+  const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [cloudTrailEvents, setCloudTrailEvents] = useState<any[]>([]);
-  const [isChangeHistoryLoaded, setIsChangeHistoryLoaded] =
-    useState<boolean>(false);
-  const [isCalculatedFieldsLoading, setIsCalculatedFieldsLoading] =
-    useState<boolean>(false);
-  const [isChangeHistoryLoading, setIsChangeHistoryLoading] =
-    useState<boolean>(false);
+  const [isChangeHistoryLoaded, setIsChangeHistoryLoaded] = useState<boolean>(false);
+  const [isCalculatedFieldsLoading, setIsCalculatedFieldsLoading] = useState<boolean>(false);
+  const [isChangeHistoryLoading, setIsChangeHistoryLoading] = useState<boolean>(false);
   const [region, setRegion] = useState<string>("us-east-1");
 
-  // Function to load region from chrome.storage.local
+  // Load region from chrome.storage.local
   const loadRegion = async () => {
     if (!chrome.storage || !chrome.storage.local) {
       console.error("chrome.storage.local is not available.");
       return;
     }
-
     try {
       const result: StoredData = await new Promise((resolve, reject) => {
         chrome.storage.local.get("region", (items) => {
@@ -66,7 +57,6 @@ const Sidebar: React.FC = () => {
           }
         });
       });
-
       setRegion(result.region || "us-east-1");
     } catch (err) {
       console.error("Error loading region from storage:", err);
@@ -74,7 +64,7 @@ const Sidebar: React.FC = () => {
     }
   };
 
-  // Function to handle changes in chrome.storage.local
+  // Listen for changes in chrome.storage.local
   const handleStorageChange = (
     changes: { [key: string]: chrome.storage.StorageChange },
     area: string
@@ -84,16 +74,12 @@ const Sidebar: React.FC = () => {
     }
   };
 
-  // Load region on component mount
   useEffect(() => {
     loadRegion();
 
-    // Set up listener for storage changes
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(handleStorageChange);
     }
-
-    // Cleanup listener on unmount
     return () => {
       if (chrome.storage && chrome.storage.onChanged) {
         chrome.storage.onChanged.removeListener(handleStorageChange);
@@ -101,6 +87,7 @@ const Sidebar: React.FC = () => {
     };
   }, []);
 
+  // Refresh analysis metadata and calculated fields
   const refreshData = useCallback(async () => {
     if (credentials && analysisId) {
       try {
@@ -115,83 +102,72 @@ const Sidebar: React.FC = () => {
         setError(null);
       } catch (err) {
         console.error(err);
-        setError(
-          "Failed to fetch analysis data. Please check your permissions."
-        );
+        setError("Failed to fetch analysis data. Please check your permissions.");
       } finally {
         setIsCalculatedFieldsLoading(false);
       }
     }
   }, [credentials, analysisId, region]);
 
-  // Effect to set initial analysisId and enhance tags when credentials change
+  // Combine updating analysis ID and enhancing resource list into one effect.
   useEffect(() => {
-    if (credentials) {
-      const currentAnalysisId = getAnalysisIdFromUrl(window.location.href);
-      setAnalysisId(currentAnalysisId);
-      enhanceResourceList(credentials).catch((err) =>
-        console.error("Failed to enhance resource list:", err)
-      );
-    } else {
+    if (!credentials) {
       setAnalysisId(null);
       setCalculatedFields([]);
       setCloudTrailEvents([]);
       setIsChangeHistoryLoaded(false);
+      return;
     }
+
+    // Helper function to update analysis ID and enhance the resource list
+    const updateAnalysisAndEnhance = () => {
+      const currentUrl = window.location.href;
+      const currentAnalysisId = getAnalysisIdFromUrl(currentUrl);
+      setAnalysisId(currentAnalysisId);
+      setCalculatedFields([]);
+      setCloudTrailEvents([]);
+      setIsChangeHistoryLoaded(false);
+      enhanceResourceList(credentials).catch((err) =>
+        console.error("Failed to enhance resource list:", err)
+      );
+    };
+
+    // Initial update on credentials change
+    updateAnalysisAndEnhance();
+
+    // Set up interval to detect URL changes
+    let prevUrl = window.location.href;
+    const intervalId = setInterval(() => {
+      const currentUrl = window.location.href;
+      if (currentUrl !== prevUrl) {
+        prevUrl = currentUrl;
+        updateAnalysisAndEnhance();
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
   }, [credentials]);
 
-  // Effect to detect URL changes and update analysisId and reload cached tags
-  useEffect(() => {
-    if (credentials) {
-      let prevUrl = window.location.href;
-
-      const intervalId = setInterval(() => {
-        const currentUrl = window.location.href;
-        if (currentUrl !== prevUrl) {
-          prevUrl = currentUrl;
-          const currentAnalysisId = getAnalysisIdFromUrl(currentUrl);
-          setAnalysisId(currentAnalysisId);
-          setCalculatedFields([]);
-          setCloudTrailEvents([]);
-          setIsChangeHistoryLoaded(false);
-          enhanceResourceList(credentials).catch((err) =>
-            console.error("Failed to enhance resource list:", err)
-          );
-        }
-      }, 1000); // Check every second
-
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [credentials]);
-
-  // Effect to refresh data when analysisId or region changes
+  // Refresh analysis data when analysisId or region changes
   useEffect(() => {
     if (credentials && analysisId) {
       refreshData();
     }
   }, [credentials, analysisId, refreshData]);
 
+  // Fetch CloudTrail events
   const fetchCloudTrailEventsData = useCallback(
     async (daysAgo: number = 7) => {
       if (credentials && analysisId) {
         try {
           setIsChangeHistoryLoading(true);
-          const events = await fetchCloudTrailEvents(
-            credentials,
-            analysisId,
-            daysAgo,
-            region
-          );
+          const events = await fetchCloudTrailEvents(credentials, analysisId, daysAgo, region);
           setCloudTrailEvents(events);
           setLastRefreshed(new Date());
           setIsChangeHistoryLoaded(true);
         } catch (err) {
           console.error(err);
-          setError(
-            "Failed to fetch CloudTrail events. Please check your permissions."
-          );
+          setError("Failed to fetch CloudTrail events. Please check your permissions.");
         } finally {
           setIsChangeHistoryLoading(false);
         }
@@ -200,17 +176,14 @@ const Sidebar: React.FC = () => {
     [credentials, analysisId, region]
   );
 
-  // Effect to trigger lazy loading of change history
+  // Lazy load change history if not already loaded
   useEffect(() => {
     if (credentials && analysisId && !isChangeHistoryLoaded) {
       fetchCloudTrailEventsData();
     }
   }, [credentials, analysisId, isChangeHistoryLoaded, fetchCloudTrailEventsData]);
 
-  const handleCredentialsReceived = (
-    receivedCredentials: any,
-    expiration: string
-  ) => {
+  const handleCredentialsReceived = (receivedCredentials: any, expiration: string) => {
     setCredentials(receivedCredentials);
     setSessionExpiration(expiration);
     setError(null);
@@ -231,10 +204,7 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <SidebarLayout
-      activeSection={activeSection}
-      onSectionChange={setActiveSection}
-    >
+    <SidebarLayout activeSection={activeSection} onSectionChange={setActiveSection}>
       {credentials && sessionExpiration && (
         <SidebarHeader
           analysisMetadata={analysisMetadata}
@@ -244,16 +214,10 @@ const Sidebar: React.FC = () => {
         />
       )}
       {showJsonInput && (
-        <AssumeRoleForm
-          onCredentialsReceived={handleCredentialsReceived}
-          onError={handleError}
-        />
+        <AssumeRoleForm onCredentialsReceived={handleCredentialsReceived} onError={handleError} />
       )}
       {error && (
-        <Typography
-          color="error"
-          sx={{ marginBottom: "8px", fontSize: "0.8rem" }}
-        >
+        <Typography color="error" sx={{ marginBottom: "8px", fontSize: "0.8rem" }}>
           {error}
         </Typography>
       )}
