@@ -1,3 +1,4 @@
+// src/components/AssumeRoleForm.tsx
 import React, { useState, useEffect } from "react";
 import {
   Typography,
@@ -54,7 +55,7 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
   ];
 
   const [region, setRegion] = useState<string>("us-east-1");
-  const [manualInput, setManualInput] = useState<boolean>(true); // Store manualInput
+  const [manualInput, setManualInput] = useState<boolean>(true);
   const [jsonInput, setJsonInput] = useState<string>("");
   const [duration, setDuration] = useState<number>(60);
   const [accessKeyId, setAccessKeyId] = useState<string>("");
@@ -62,7 +63,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
   const [sessionToken, setSessionToken] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  // Load region and manualInput from Chrome local storage, and keys from sessionStorage
   useEffect(() => {
     if (chrome.storage) {
       chrome.storage.local.get(["region", "manualInput"], (result) => {
@@ -82,14 +82,12 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
     setSessionToken(savedSessionToken);
   }, []);
 
-  // Save region and manualInput to Chrome local storage whenever they change
   useEffect(() => {
     if (chrome.storage) {
       chrome.storage.local.set({ region, manualInput });
     }
   }, [region, manualInput]);
 
-  // Save sensitive data (keys) to sessionStorage whenever they change
   useEffect(() => {
     if (accessKeyId) sessionStorage.setItem("accessKeyId", accessKeyId);
     if (secretAccessKey)
@@ -127,7 +125,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
       onCredentialsReceived(credentials, expiration);
       setError(null);
 
-      // After successful import, clear input fields except region
       setJsonInput("");
       setAccessKeyId("");
       setSecretAccessKey("");
@@ -145,20 +142,21 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
 
   const handleAssumeRole = (credentials: any, expiration?: string) => {
     if (manualInput) {
+      // For manual input, ensure all required fields are present in credentials
+      const { accessKeyId, secretAccessKey, sessionToken } = credentials;
       if (accessKeyId && secretAccessKey && sessionToken) {
         fetchExpirationUsingSTS(credentials);
       } else {
         const errorMsg =
-          "Please fill out all fields for Access Key, Secret Key, and Session Token.";
+          "Please provide all required credentials (Access Key ID, Secret Access Key, Session Token).";
         setError(errorMsg);
         onError(errorMsg);
       }
     } else {
+      // JSON input case
       if (credentials && expiration) {
         onCredentialsReceived(credentials, expiration);
         setError(null);
-
-        // After successful import, clear input fields except region
         setJsonInput("");
         setAccessKeyId("");
         setSecretAccessKey("");
@@ -193,7 +191,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
         appropriate permissions to access Amazon QuickSight APIs.
       </Typography>
 
-      {/* Step 1: Select Region */}
       <Card sx={{ marginBottom: "24px" }}>
         <CardContent>
           <Typography variant="h6" sx={{ marginBottom: "16px" }}>
@@ -217,7 +214,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
         </CardContent>
       </Card>
 
-      {/* Step 2: Choose Input Method */}
       <Card sx={{ marginBottom: "24px" }}>
         <CardContent>
           <Typography variant="h6" sx={{ marginBottom: "16px" }}>
@@ -247,7 +243,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
         </CardContent>
       </Card>
 
-      {/* Step 3: Select Session Duration */}
       <Card sx={{ marginBottom: "24px" }}>
         <CardContent>
           <Typography variant="h6" sx={{ marginBottom: "16px" }}>
@@ -285,7 +280,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
         </CardContent>
       </Card>
 
-      {/* Input Forms */}
       {manualInput ? (
         <ManualInputForm
           accessKeyId={accessKeyId}
@@ -306,7 +300,6 @@ const AssumeRoleForm: React.FC<AssumeRoleFormProps> = ({
         />
       )}
 
-      {/* Error Message */}
       {error && (
         <Typography color="error" sx={{ marginTop: "8px" }}>
           {error}
