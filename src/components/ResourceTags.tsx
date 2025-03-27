@@ -1,9 +1,10 @@
 // ../components/ResourceTags.tsx
 import React, { useState, useEffect } from 'react';
 import { CloudTrailCredentials } from '../types/CloudTrailCredentials';
-import { getResourceTags, getRegionFromUrl, getAccountId, tagCache } from '../utils/tagEnhancer';
+import { getRegionFromUrl } from '../utils/quicksightUiUtils';
+import { getAwsAccountId, getResourceTags as fetchResourceTags } from '../utils/quicksightUtils'; // Import new function with alias
 import { QuickSightClient, TagResourceCommand, UntagResourceCommand } from '@aws-sdk/client-quicksight';
-import { Box, Chip, TextField, Button, Typography } from '@mui/material';
+import { Box, Chip, TextField, Button } from '@mui/material';
 
 interface ResourceTagsProps {
   resourceType: string;
@@ -27,6 +28,9 @@ interface AddTagPillProps {
   onTagAdded: (newTag: { Key: string; Value: string }) => void;
 }
 
+// Local cache to maintain compatibility with original behavior
+const tagCache: { [key: string]: { Key: string; Value: string }[] } = {};
+
 const TagPill: React.FC<TagPillProps> = ({
   tag,
   resourceType,
@@ -42,8 +46,9 @@ const TagPill: React.FC<TagPillProps> = ({
   const handleSave = async () => {
     try {
       const region = getRegionFromUrl();
-      const accountId = await getAccountId(credentials);
-      const currentTags = await getResourceTags(resourceId, accountId, region, resourceType, credentials);
+      const accountId = await getAwsAccountId(credentials, region);
+      const resourceArn = `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`;
+      const currentTags = await fetchResourceTags(resourceArn, credentials, region);
       const updatedTags = currentTags.filter((t) => t.Key !== tag.Key);
       updatedTags.push({ Key: keyValue, Value: valueValue });
 
@@ -56,7 +61,7 @@ const TagPill: React.FC<TagPillProps> = ({
         },
       });
       const command = new TagResourceCommand({
-        ResourceArn: `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`,
+        ResourceArn: resourceArn,
         Tags: updatedTags,
       });
       await quickSightClient.send(command);
@@ -71,7 +76,8 @@ const TagPill: React.FC<TagPillProps> = ({
   const handleDelete = async () => {
     try {
       const region = getRegionFromUrl();
-      const accountId = await getAccountId(credentials);
+      const accountId = await getAwsAccountId(credentials, region);
+      const resourceArn = `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`;
       const quickSightClient = new QuickSightClient({
         region,
         credentials: {
@@ -81,7 +87,7 @@ const TagPill: React.FC<TagPillProps> = ({
         },
       });
       const command = new UntagResourceCommand({
-        ResourceArn: `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`,
+        ResourceArn: resourceArn,
         TagKeys: [tag.Key],
       });
       await quickSightClient.send(command);
@@ -165,8 +171,9 @@ const AddTagPill: React.FC<AddTagPillProps> = ({
     if (!keyValue || !valueValue) return;
     try {
       const region = getRegionFromUrl();
-      const accountId = await getAccountId(credentials);
-      const currentTags = await getResourceTags(resourceId, accountId, region, resourceType, credentials);
+      const accountId = await getAwsAccountId(credentials, region);
+      const resourceArn = `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`;
+      const currentTags = await fetchResourceTags(resourceArn, credentials, region);
       const updatedTags = [...currentTags, { Key: keyValue, Value: valueValue }];
 
       const quickSightClient = new QuickSightClient({
@@ -178,7 +185,7 @@ const AddTagPill: React.FC<AddTagPillProps> = ({
         },
       });
       const command = new TagResourceCommand({
-        ResourceArn: `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`,
+        ResourceArn: resourceArn,
         Tags: updatedTags,
       });
       await quickSightClient.send(command);
@@ -246,29 +253,46 @@ const AddTagPill: React.FC<AddTagPillProps> = ({
 export const ResourceTags: React.FC<ResourceTagsProps> = ({ resourceType, resourceId, credentials }) => {
   const [tags, setTags] = useState<{ Key: string; Value: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTags = async () => {
-      const cacheKey = `${resourceType}-${resourceId}`;
-      if (tagCache[cacheKey]) {
-        setTags(tagCache[cacheKey]);
-      } else {
-        const region = getRegionFromUrl();
-        const accountId = await getAccountId(credentials);
-        const fetchedTags = await getResourceTags(resourceId, accountId, region, resourceType, credentials);
-        setTags(fetchedTags);
-        tagCache[cacheKey] = fetchedTags;
+      setLoading(true);
+      setError(null);
+      try {
+        const cacheKey = `${resourceType}-${resourceId}`;
+        if (tagCache[cacheKey]) {
+          setTags(tagCache[cacheKey]);
+        } else {
+          const region = getRegionFromUrl();
+          const accountId = await getAwsAccountId(credentials, region);
+          const resourceArn = `arn:aws:quicksight:${region}:${accountId}:${resourceType}/${resourceId}`;
+          const fetchedTags = await fetchResourceTags(resourceArn, credentials, region);
+          setTags(fetchedTags);
+          tagCache[cacheKey] = fetchedTags;
+        }
+      } catch (error) {
+        console.error('Error fetching tags:', error);
+        setError('Failed to load tags');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchTags().catch((error) => {
-      console.error('Error fetching tags:', error);
-      setLoading(false);
-    });
+    fetchTags();
   }, [resourceType, resourceId, credentials]);
 
   if (loading) {
-    return <Typography variant="body2">Loading tags...</Typography>;
+    return null; // Show nothing during loading to avoid UI clutter
+  }
+
+  if (error) {
+    return (
+      <Chip
+        label={error}
+        color="error"
+        sx={{ mr: 0.5, mb: 0.5, fontSize: '0.75rem', height: 24 }}
+      />
+    );
   }
 
   return (
